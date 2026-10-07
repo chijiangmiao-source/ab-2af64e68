@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>深空协作组 · 离线探测清单演练</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3; --dim:#8b949e; --ok:#3fb950; --bad:#f85149; --warn:#d29922; --acc:#58a6ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 -apple-system,"Segoe UI",Roboto,"Noto Sans SC",sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; }
+  header .sub { color:var(--dim); }
+  main { padding:16px 20px; display:grid; gap:16px; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; }
+  h2 { font-size:15px; margin:0 0 10px; }
+  h3 { font-size:13px; margin:12px 0 6px; color:var(--dim); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:6px 0; }
+  input, select, button { background:#0d1117; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 9px; font:inherit; }
+  button { cursor:pointer; background:#21262d; }
+  button:hover { border-color:var(--acc); }
+  button.primary { background:#1f6feb; border-color:#1f6feb; color:#fff; }
+  .grid3 { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; }
+  .card { border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:#0d1117; }
+  .card h3 { margin-top:0; color:var(--acc); }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { border:1px solid var(--line); padding:4px 8px; text-align:left; vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  code, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; border:1px solid var(--line); margin:1px 3px 1px 0; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); } .dim { color:var(--dim); }
+  #msg { min-height:20px; font-weight:600; }
+  ul { margin:4px 0; padding-left:18px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>深空协作组 · 离线探测清单演练</h1>
+  <span class="sub">三副本 · 删除墓碑 · 三方稳定压缩 · 迟到消息抑制</span>
+</header>
+<main>
+  <section>
+    <h2>1. 建立演练（三个副本）</h2>
+    <div class="row">
+      <input id="r0" value="alpha" size="8"> <input id="r1" value="beta" size="8"> <input id="r2" value="gamma" size="8">
+      <button class="primary" onclick="createDrill()">建立演练</button>
+      <span id="drillInfo" class="dim"></span>
+    </div>
+    <div id="msg"></div>
+  </section>
+
+  <section id="eventSection" style="display:none">
+    <h2>2. 录入事件</h2>
+    <div class="grid3">
+      <div class="card">
+        <h3>新增（带副本、递增计数、任意投递目标）</h3>
+        <div class="row"><label>副本 <select id="addReplica"></select></label>
+        <label>计数 <input id="addCounter" type="number" min="1" value="1" size="4" style="width:70px"></label></div>
+        <div class="row"><label>载荷 <input id="addPayload" value="探测条目" size="14"></label></div>
+        <div class="row"><label>投递目标 <select id="addTarget"></select></label>
+        <button onclick="sendEvent('add')">录入新增</button></div>
+      </div>
+      <div class="card">
+        <h3>删除（绑定当时观察到的新增点）</h3>
+        <div class="row"><label>删除者 <select id="delReplica"></select></label>
+        <label>投递目标 <select id="delTarget"></select></label>
+        <button onclick="sendEvent('delete')">录入删除</button></div>
+        <h3>同步确认</h3>
+        <div class="row"><label>副本 <select id="ackReplica"></select></label>
+        <button onclick="sendEvent('ack')">录入确认</button></div>
+      </div>
+      <div class="card">
+        <h3>重开（从持久化状态重新载入）</h3>
+        <div class="row"><label>副本 <select id="reopenReplica"></select></label>
+        <button onclick="sendEvent('reopen')">录入重开</button></div>
+        <h3>压缩（需三方确认越过同一删除点）</h3>
+        <div class="row"><button onclick="sendEvent('compact')">尝试压缩</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="stateSection" style="display:none">
+    <h2>3. 各副本状态</h2>
+    <div class="grid3" id="replicaCards"></div>
+    <h3>演练级证据</h3>
+    <div class="row">
+      <span>三方稳定前沿：<code id="stableFrontier" class="mono"></code></span>
+      <span>已压缩前沿：<code id="compactedFrontier" class="mono"></code></span>
+    </div>
+    <h3>被抑制的迟到消息（证据）</h3>
+    <div id="suppressed"></div>
+    <h3>压缩记录</h3>
+    <div id="compactions"></div>
+    <h3>事件日志（含被拒绝事件）</h3>
+    <div id="events"></div>
+  </section>
+</main>
+<script>
+let drillId = null;
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  return { status: res.status, body: await res.json() };
+}
+function vv(v) {
+  return '{' + Object.entries(v).map(([k, x]) => k + ':' + x).join(', ') + '}';
+}
+function say(text, ok) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = ok ? 'ok' : 'bad';
+}
+
+async function createDrill() {
+  const replicas = [0, 1, 2].map(i => document.getElementById('r' + i).value.trim());
+  const { status, body } = await api('/api/drills', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ replicas }),
+  });
+  if (!body.ok) return say('建立失败：' + body.error, false);
+  drillId = body.id;
+  document.getElementById('drillInfo').textContent = '演练 #' + drillId + ' · 副本：' + body.replicas.join(' / ');
+  for (const id of ['addReplica', 'addTarget', 'delReplica', 'delTarget', 'ackReplica', 'reopenReplica']) {
+    document.getElementById(id).innerHTML = body.replicas.map(r => `<option>${r}</option>`).join('');
+  }
+  document.getElementById('eventSection').style.display = '';
+  document.getElementById('stateSection').style.display = '';
+  say('演练已建立', true);
+  refresh();
+}
+
+async function sendEvent(type) {
+  const g = id => document.getElementById(id).value;
+  let evt = { type };
+  if (type === 'add') evt = { type, replica: g('addReplica'), counter: Number(g('addCounter')), payload: g('addPayload'), target: g('addTarget') };
+  if (type === 'delete') evt = { type, replica: g('delReplica'), target: g('delTarget') };
+  if (type === 'ack') evt = { type, replica: g('ackReplica') };
+  if (type === 'reopen') evt = { type, replica: g('reopenReplica') };
+  const { status, body } = await api(`/api/drills/${drillId}/events`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(evt),
+  });
+  if (body.ok) {
+    say(`事件已接受（#${body.event.seq}）`, true);
+    if (type === 'add' && !body.event.replay) document.getElementById('addCounter').value = Number(g('addCounter')) + 1;
+    render(body.state);
+  } else {
+    say('事件被拒绝：' + body.error, false);
+    if (body.state) render(body.state);
+  }
+}
+
+async function refresh() {
+  if (!drillId) return;
+  const { body } = await api(`/api/drills/${drillId}`);
+  if (body.ok) render(body);
+}
+
+function render(s) {
+  document.getElementById('replicaCards').innerHTML = s.replicas.map(r => {
+    const p = s.perReplica[r];
+    const vis = p.visible.length
+      ? '<ul>' + p.visible.map(e => `<li><code>${e.dot}</code> ${escapeHtml(e.payload)}</li>`).join('') + '</ul>'
+      : '<span class="dim">（无可见条目）</span>';
+    const tombs = p.tombstones.length
+      ? p.tombstones.map(t => `<span class="pill warn">${t.id} by ${t.by} ctx=${vv(t.context)}</span>`).join('')
+      : '<span class="dim">无</span>';
+    return `<div class="card"><h3>副本 ${r}</h3>
+      <div>可见条目：${vis}</div>
+      <div>已知前沿：<code>${vv(p.frontier)}</code></div>
+      <div>已确认前沿：<code>${vv(p.acked)}</code></div>
+      <div>已知点：<code class="dim">${p.knownDots.join(' ') || '（无）'}</code></div>
+      <div>墓碑：${tombs}</div></div>`;
+  }).join('');
+  document.getElementById('stableFrontier').textContent = vv(s.stableFrontier);
+  document.getElementById('compactedFrontier').textContent = vv(s.compactedFrontier);
+  document.getElementById('suppressed').innerHTML = s.suppressed.length
+    ? '<table><tr><th>#</th><th>点</th><th>载荷</th><th>目标</th><th>原因</th></tr>' + s.suppressed.map(x =>
+      `<tr><td>${x.seq}</td><td><code>${x.dot}</code></td><td>${escapeHtml(x.payload)}</td><td>${x.target}</td><td class="warn">${x.reason === 'compacted' ? '已被压缩覆盖' : '已被删除覆盖'}</td></tr>`).join('') + '</table>'
+    : '<span class="dim">（暂无）</span>';
+  document.getElementById('compactions').innerHTML = s.compactions.length
+    ? '<table><tr><th>#</th><th>移除墓碑</th><th>三方稳定前沿</th><th>压缩后前沿</th></tr>' + s.compactions.map(c =>
+      `<tr><td>${c.seq}</td><td>${c.removedTombstones.join(', ')}</td><td><code>${vv(c.stableFrontier)}</code></td><td><code>${vv(c.compactedFrontier)}</code></td></tr>`).join('') + '</table>'
+    : '<span class="dim">（暂无）</span>';
+  const all = [
+    ...s.events.map(e => ({ seq: e.seq, html: `<tr><td>${e.seq}</td><td class="ok">接受</td><td>${e.type}</td><td><code>${escapeHtml(JSON.stringify({ ...e, seq: undefined, type: undefined }))}</code></td></tr>` })),
+    ...s.rejected.map(e => ({ seq: e.seq, html: `<tr><td>${e.seq}</td><td class="bad">拒绝</td><td>${e.type}</td><td>${escapeHtml(e.error)}</td></tr>` })),
+  ].sort((a, b) => a.seq - b.seq);
+  document.getElementById('events').innerHTML = all.length
+    ? '<table><tr><th>#</th><th>结果</th><th>类型</th><th>详情</th></tr>' + all.map(x => x.html).join('') + '</table>'
+    : '<span class="dim">（暂无）</span>';
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+</script>
+</body>
+</html>

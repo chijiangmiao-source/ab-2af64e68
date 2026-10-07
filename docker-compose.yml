@@ -1,0 +1,25 @@
+services:
+  web:
+    build: .
+    environment:
+      PORT: 8080
+    ports:
+      # 宿主端口可通过 HOST_PORT 环境变量配置，默认 8080
+      - "${HOST_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 3s
+
+  # 可执行验收服务：围绕迟到消息与稳定压缩运行代码测试、
+  # 完成构建检查并进行 API/HTTP 冒烟，结束后以退出码报告结果。
+  verify:
+    build: .
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      BASE_URL: http://web:8080
+    command: ["node", "scripts/verify.js"]

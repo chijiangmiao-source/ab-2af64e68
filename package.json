@@ -1,0 +1,17 @@
+{
+  "name": "deepspace-offline-list",
+  "version": "1.0.0",
+  "private": true,
+  "description": "深空协作组离线探测清单：三副本演练、删除墓碑、稳定压缩与迟到消息抑制",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/",
+    "check": "node --check src/crdt.js && node --check src/server.js && node --check scripts/verify.js",
+    "verify": "node scripts/verify.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
